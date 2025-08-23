@@ -168,7 +168,7 @@
               pnpmDeps = pnpm.fetchDeps {
                 pname = projectName;
                 src = buildSrc;
-                hash = "sha256-IvFuPkzVKk+wCHafKNR+ekOokMDNW3kw2CGSnFrtlO8=";
+                hash = "sha256-pHJ6ZKnK7I3t5zzfnQT4DtVXMFe/WEMDMAbvcj+yQr0=";
               };
               cargoBuildCommand = "cargo tauri build --no-bundle --";
               postInstall = ''

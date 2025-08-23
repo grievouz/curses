@@ -82,7 +82,7 @@ class Service_Files implements IServiceInterface {
     });
   }
 
-  installFonts(fonts: FontMeta[], files: Uint8Array[]) {
+  installFonts(fonts: FontMeta[], files: Uint8Array<ArrayBuffer>[]) {
     const meta: SaveFile[] = fonts.map(f => ({
       type: "font/ttf",
       name: f.family,
@@ -203,7 +203,7 @@ class Service_Files implements IServiceInterface {
     }
   }
 
-  #saveFiles(filesMeta: SaveFile[], files: Uint8Array[]) {
+  #saveFiles(filesMeta: SaveFile[], files: Uint8Array<ArrayBuffer>[]) {
     const ids: string[] = filesMeta.map((_) => nanoid());
     window.ApiClient.document.file.transact(() => {
       const metaList = this.#yFilesMeta;

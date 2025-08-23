@@ -24,7 +24,7 @@ class Service_Document implements IServiceInterface {
   }
 
   get fileArray() {
-    return this.#file.getArray<Uint8Array>("files");
+    return this.#file.getArray<Uint8Array<ArrayBuffer>>("files");
   }
 
   get file() {
