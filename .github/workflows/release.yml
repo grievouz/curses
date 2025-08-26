@@ -1,15 +1,71 @@
 name: 'release'
 
 on:
+  schedule:
+    # Run daily at 2 AM UTC
+    - cron: '0 2 * * *'
   workflow_dispatch:
 
 jobs:
+  check-changes:
+    runs-on: ubuntu-latest
+    outputs:
+      should-build: ${{ steps.check.outputs.should-build }}
+      commit-sha: ${{ steps.check.outputs.commit-sha }}
+      release-version: ${{ steps.version.outputs.value }}
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+      
+      - name: Generate date version
+        id: version
+        shell: bash
+        run: echo "value=$(date +'%Y.%m.%d')" >> $GITHUB_OUTPUT
+      
+      - name: Check for changes since last release
+        id: check
+        shell: bash
+        run: |
+          # Get the latest release tag
+          LATEST_TAG=$(gh release list --limit 1 --json tagName --jq '.[0].tagName' || echo "")
+          
+          if [ -z "$LATEST_TAG" ]; then
+            echo "No previous releases found, will build"
+            echo "should-build=true" >> $GITHUB_OUTPUT
+            echo "commit-sha=$(git rev-parse HEAD)" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+          
+          # Get the commit SHA of the latest release
+          LATEST_RELEASE_SHA=$(git rev-list -n 1 "$LATEST_TAG" 2>/dev/null || echo "")
+          
+          if [ -z "$LATEST_RELEASE_SHA" ]; then
+            echo "Could not find commit for latest release, will build"
+            echo "should-build=true" >> $GITHUB_OUTPUT
+            echo "commit-sha=$(git rev-parse HEAD)" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+          
+          # Check if there are new commits since the last release
+          if [ "$(git rev-parse HEAD)" != "$LATEST_RELEASE_SHA" ]; then
+            echo "New commits found since last release"
+            echo "should-build=true" >> $GITHUB_OUTPUT
+            echo "commit-sha=$(git rev-parse HEAD)" >> $GITHUB_OUTPUT
+          else
+            echo "No new commits since last release"
+            echo "should-build=false" >> $GITHUB_OUTPUT
+            echo "commit-sha=" >> $GITHUB_OUTPUT
+          fi
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
   build:
+    needs: check-changes
+    if: needs.check-changes.outputs.should-build == 'true'
     permissions:
       contents: write
     strategy:
       fail-fast: false
-
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v3
@@ -17,32 +73,24 @@ jobs:
         uses: actions/setup-node@v3
       - name: Install pnpm
         uses: pnpm/action-setup@v2
-      - uses: SebRollen/toml-action@v1.0.1
-        id: version
-        with:
-          file: 'src-tauri/Cargo.toml'
-          field: 'package.version'
-      - run: echo ${{steps.version.outputs.value}}
+      - run: echo v${{needs.check-changes.outputs.release-version}}
       - name: setup rust
         uses: dtolnay/rust-toolchain@stable
       - name: Install Vulkan SDK and Runtime
-        uses: jakoch/install-vulkan-sdk-action@v1.1.1
+        uses: jakoch/install-vulkan-sdk-action@v1.2.5
       - name: setup pnpm deps
         run: pnpm i --frozen-lockfile
       - name: compile
         run: pnpm tauri build
         env:
           CURSES_TWITCH_CLIENT_ID: ${{secrets.CURSES_TWITCH_CLIENT_ID}}
-
       - name: create release
-        uses: softprops/action-gh-release@v1
-#        if: ${{startsWith(github.ref, 'refs/tags/') }}
+        uses: softprops/action-gh-release@v2
         with:
-          name: Release ${{steps.version.outputs.value}}
-          tag_name: v${{steps.version.outputs.value}}
-          draft: true
+          name: v${{needs.check-changes.outputs.release-version}}
+          tag_name: v${{needs.check-changes.outputs.release-version}}
           generate_release_notes: true
           fail_on_unmatched_files: true
           files: |
-            src-tauri/target/release/curses.exe
-            src-tauri/target/release/bundle/msi/curses_${{steps.version.outputs.value}}_x64_en-US.msi
+            target/release/curses.exe
+            target/release/bundle/msi/curses_*_x64_en-US.msi
